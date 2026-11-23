@@ -16,7 +16,7 @@
     <string name="theme_dark_label">Tema: Escuro (toque p/ Claro)</string>
     <string name="theme_light_label">Tema: Claro (toque p/ Escuro)</string>
 
-    <string name="btn_back">&lt;</string>
+    <string name="btn_back">&#8592;</string>
     <string name="btn_font_down">A-</string>
     <string name="btn_font_up">A+</string>
     <string name="btn_info">i</string>
@@ -29,8 +29,8 @@
     <string name="tab_hymn_old">Antigo (613)</string>
     <string name="tab_hymn_favs">★ Favs</string>
 
-    <string name="btn_prev_chapter">&lt;</string>
-    <string name="btn_next_chapter">&gt;</string>
+    <string name="btn_prev_chapter">&#171;</string>
+    <string name="btn_next_chapter">&#187;</string>
 
     <string name="hint_hymn_search">Nº ou título...</string>
     <string name="btn_go">Ir</string>

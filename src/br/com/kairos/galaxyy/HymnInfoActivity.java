@@ -157,39 +157,40 @@ public class HymnInfoActivity extends Activity {
                 });
             }
 
-            // 2. Textos relacionados clicaveis
+            // 2. Textos relacionados clicaveis em grade de 2 colunas com chips curtos
             if (textosRel != null && textosRel.trim().length() > 0) {
-                String[] refs = textosRel.split("\\|");
-                boolean addedAny = false;
-                for (int i = 0; i < refs.length; i++) {
-                    final String ref = refs[i].trim();
-                    if (ref.length() == 0) continue;
-                    addedAny = true;
-
-                    TextView card = new TextView(this);
-                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.FILL_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT
-                    );
-                    lp.bottomMargin = 6;
-                    card.setLayoutParams(lp);
-                    card.setPadding(12, 8, 12, 8);
-                    card.setTextSize(13);
-                    card.setTypeface(null, Typeface.BOLD);
-                    card.setClickable(true);
-                    card.setFocusable(true);
-                    card.setText(getString(R.string.open_in_bible_prefix) + ref + " >");
-                    ThemeHelper.styleRefCard(this, card);
-                    card.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            openBibleRef(ref);
-                        }
-                    });
-                    relatedRefsContainer.addView(card);
+                String[] rawRefs = textosRel.split("\\|");
+                java.util.List<String> cleanRefs = new java.util.ArrayList<String>();
+                for (int i = 0; i < rawRefs.length; i++) {
+                    String ref = rawRefs[i].trim();
+                    if (ref.length() > 0) {
+                        cleanRefs.add(ref);
+                    }
                 }
-                if (addedAny) {
+                if (!cleanRefs.isEmpty()) {
                     lblRelatedTexts.setVisibility(View.VISIBLE);
+                    int gapPx = dpToPx(6);
+                    int minH = dpToPx(44);
+                    int padH = dpToPx(8);
+                    int padV = dpToPx(8);
+
+                    for (int i = 0; i < cleanRefs.size(); i += 2) {
+                        LinearLayout row = new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.FILL_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                        );
+                        rowLp.bottomMargin = gapPx;
+                        row.setLayoutParams(rowLp);
+
+                        row.addView(createRefChip(cleanRefs.get(i), minH, padH, padV, 0));
+
+                        if (i + 1 < cleanRefs.size()) {
+                            row.addView(createRefChip(cleanRefs.get(i + 1), minH, padH, padV, gapPx));
+                        }
+                        relatedRefsContainer.addView(row);
+                    }
                 }
             }
 
@@ -289,6 +290,41 @@ public class HymnInfoActivity extends Activity {
             }
         }
         return ssb;
+    }
+
+    private int dpToPx(int dp) {
+        return (int) android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_DIP,
+                dp,
+                getResources().getDisplayMetrics()
+        );
+    }
+
+    private TextView createRefChip(final String ref, int minH, int padH, int padV, int leftMargin) {
+        TextView chip = new TextView(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1.0f
+        );
+        lp.leftMargin = leftMargin;
+        chip.setLayoutParams(lp);
+        chip.setMinHeight(minH);
+        chip.setGravity(android.view.Gravity.CENTER);
+        chip.setPadding(padH, padV, padH, padV);
+        chip.setTextSize(14);
+        chip.setTypeface(null, Typeface.BOLD);
+        chip.setClickable(true);
+        chip.setFocusable(true);
+        chip.setText(ref);
+        ThemeHelper.styleRefCard(this, chip);
+        chip.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openBibleRef(ref);
+            }
+        });
+        return chip;
     }
 
     private void openBibleRef(String ref) {

@@ -239,9 +239,14 @@ public class BiblePickerActivity extends Activity {
         gridChapters.setVisibility(View.VISIBLE);
 
         final int bgRes = ThemeHelper.isDarkTheme(this)
-                ? R.drawable.btn_bar_dark
-                : R.drawable.btn_bar_light;
+                ? R.drawable.btn_kairos_dark
+                : R.drawable.btn_kairos_light;
         final int textColor = ThemeHelper.getTextColor(this);
+        final int minHeightPx = (int) android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_DIP,
+                52,
+                getResources().getDisplayMetrics()
+        );
 
         ArrayAdapter<Integer> adapter = new ArrayAdapter<Integer>(
                 this,
@@ -256,8 +261,9 @@ public class BiblePickerActivity extends Activity {
                 } else {
                     tv = new TextView(BiblePickerActivity.this);
                     tv.setGravity(Gravity.CENTER);
-                    tv.setPadding(4, 10, 4, 10);
-                    tv.setTextSize(15);
+                    tv.setMinHeight(minHeightPx);
+                    tv.setTextSize(18);
+                    tv.setTypeface(null, android.graphics.Typeface.BOLD);
                 }
                 tv.setBackgroundResource(bgRes);
                 tv.setTextColor(textColor);

@@ -8,7 +8,7 @@
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="fill_parent"
-        android:layout_height="38dp"
+        android:layout_height="42dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingLeft="6dp"
@@ -16,11 +16,11 @@
 
         <Button
             android:id="@+id/btnBack"
-            android:layout_width="34dp"
-            android:layout_height="28dp"
+            android:layout_width="40dp"
+            android:layout_height="32dp"
             android:padding="0dp"
             android:text="@string/btn_back"
-            android:textSize="15sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <TextView
@@ -75,7 +75,7 @@
                 android:id="@+id/txtBaseVerseContent"
                 android:layout_width="fill_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="6dp"
+                android:layout_marginBottom="8dp"
                 android:lineSpacingMultiplier="1.25"
                 android:textSize="15sp"
                 android:visibility="gone" />
@@ -84,15 +84,14 @@
                 android:id="@+id/btnOpenBaseChapter"
                 android:layout_width="fill_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="14dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:paddingLeft="10dp"
-                android:paddingTop="8dp"
-                android:paddingRight="10dp"
-                android:paddingBottom="8dp"
+                android:gravity="center"
+                android:minHeight="44dp"
+                android:padding="10dp"
                 android:text="@string/open_chapter_in_bible"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
