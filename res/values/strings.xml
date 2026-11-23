@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kairós Lite</string>
+    <string name="app_brand">KAIRÓS</string>
+    <string name="app_subtitle">Lite • Bíblia, Hinário e Pôr do Sol</string>
     <string name="title_bible">Bíblia (ARA)</string>
     <string name="title_hymnal">Hinário Adventista</string>
-    <string name="title_sunset">Pôr do Sol 2026</string>
+    <string name="title_sunset">Pôr do Sol</string>
 
     <string name="btn_bible">Bíblia Sagrada</string>
     <string name="btn_hymnal">Hinário Adventista</string>
@@ -12,12 +14,18 @@
     <string name="theme_dark_label">Tema: Escuro (toque p/ Claro)</string>
     <string name="theme_light_label">Tema: Claro (toque p/ Escuro)</string>
 
+    <string name="btn_back">&lt;</string>
+    <string name="btn_font_down">A-</string>
+    <string name="btn_font_up">A+</string>
+
     <string name="btn_prev_chapter">&lt;</string>
     <string name="btn_next_chapter">&gt;</string>
 
     <string name="hint_hymn_number">Nº hino</string>
     <string name="btn_go">Ir</string>
     <string name="hymn_not_found">Hino não encontrado.</string>
+    <string name="open_in_bible_prefix">Ler na Bíblia: </string>
+    <string name="ref_not_found">Referência bíblica não encontrada.</string>
 
     <string name="loading_db">Preparando banco de dados...</string>
     <string name="error_open_bible">Erro ao abrir Bíblia: </string>

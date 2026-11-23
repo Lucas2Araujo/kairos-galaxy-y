@@ -3,7 +3,16 @@ package br.com.kairos.galaxyy;
 import android.app.Activity;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Layout;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
+import android.util.TypedValue;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -16,20 +25,24 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
+import br.com.kairos.galaxyy.data.BibleReferenceParser;
 import br.com.kairos.galaxyy.db.AssetDbHelper;
 import br.com.kairos.galaxyy.ui.ThemeHelper;
 
 public class BibleActivity extends Activity {
 
+    public static final String EXTRA_BIBLE_REF = "bible_ref";
     private static final String BIBLE_DB = "ARA.sqlite";
 
     private static class BookItem {
         final int id;
         final String name;
+        final String normalizedName;
 
         BookItem(int id, String name) {
             this.id = id;
             this.name = name;
+            this.normalizedName = BibleReferenceParser.normalize(name);
         }
 
         @Override
@@ -46,7 +59,11 @@ public class BibleActivity extends Activity {
 
     private final List<BookItem> books = new ArrayList<BookItem>();
     private final List<Integer> chapters = new ArrayList<Integer>();
+
     private int pendingChapterIndex = 0;
+    private int pendingChapterNumber = -1;
+    private int highlightVerseStart = -1;
+    private int highlightVerseEnd = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,17 +71,54 @@ public class BibleActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_bible);
 
+        View root = findViewById(R.id.rootBible);
+        root.setBackgroundColor(ThemeHelper.getBackgroundColor(this));
+
+        ThemeHelper.styleTopBar(
+                this,
+                findViewById(R.id.topBar),
+                findViewById(R.id.topDivider),
+                (TextView) findViewById(R.id.txtTopTitle),
+                (Button) findViewById(R.id.btnBack)
+        );
+
+        Button btnFontDown = (Button) findViewById(R.id.btnFontDown);
+        Button btnFontUp = (Button) findViewById(R.id.btnFontUp);
+        Button btnPrev = (Button) findViewById(R.id.btnPrevChapter);
+        Button btnNext = (Button) findViewById(R.id.btnNextChapter);
+
+        ThemeHelper.styleBarButton(this, btnFontDown);
+        ThemeHelper.styleBarButton(this, btnFontUp);
+        ThemeHelper.styleBarButton(this, btnPrev);
+        ThemeHelper.styleBarButton(this, btnNext);
+
         spinnerBooks = (Spinner) findViewById(R.id.spinnerBooks);
         spinnerChapters = (Spinner) findViewById(R.id.spinnerChapters);
         scrollBible = (ScrollView) findViewById(R.id.scrollBible);
         txtBibleChapter = (TextView) findViewById(R.id.txtBibleChapter);
+        txtBibleChapter.setTextColor(ThemeHelper.getTextColor(this));
+        applyFontSize();
 
-        Button btnPrev = (Button) findViewById(R.id.btnPrevChapter);
-        Button btnNext = (Button) findViewById(R.id.btnNextChapter);
+        btnFontDown.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ThemeHelper.adjustFontSize(BibleActivity.this, -ThemeHelper.FONT_STEP_SP);
+                applyFontSize();
+            }
+        });
+
+        btnFontUp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ThemeHelper.adjustFontSize(BibleActivity.this, ThemeHelper.FONT_STEP_SP);
+                applyFontSize();
+            }
+        });
 
         btnPrev.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                clearHighlight();
                 navigateChapter(-1);
             }
         });
@@ -72,6 +126,7 @@ public class BibleActivity extends Activity {
         btnNext.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                clearHighlight();
                 navigateChapter(1);
             }
         });
@@ -94,6 +149,15 @@ public class BibleActivity extends Activity {
         });
     }
 
+    private void applyFontSize() {
+        txtBibleChapter.setTextSize(TypedValue.COMPLEX_UNIT_SP, ThemeHelper.getFontSize(this));
+    }
+
+    private void clearHighlight() {
+        highlightVerseStart = -1;
+        highlightVerseEnd = -1;
+    }
+
     private void loadBooks() {
         books.clear();
         Cursor cursor = null;
@@ -105,6 +169,21 @@ public class BibleActivity extends Activity {
         } finally {
             if (cursor != null) {
                 cursor.close();
+            }
+        }
+
+        int initialBookIndex = 0;
+        String incomingRef = getIntent().getStringExtra(EXTRA_BIBLE_REF);
+        if (incomingRef != null && incomingRef.trim().length() > 0) {
+            BibleReferenceParser.ParsedRef parsed = BibleReferenceParser.parse(incomingRef);
+            int matchedIndex = findBookIndex(parsed);
+            if (parsed != null && matchedIndex >= 0) {
+                initialBookIndex = matchedIndex;
+                pendingChapterNumber = parsed.chapter;
+                highlightVerseStart = parsed.verseStart;
+                highlightVerseEnd = parsed.verseEnd;
+            } else {
+                Toast.makeText(this, R.string.ref_not_found, Toast.LENGTH_SHORT).show();
             }
         }
 
@@ -120,8 +199,9 @@ public class BibleActivity extends Activity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (position >= 0 && position < books.size()) {
-                    loadChapters(books.get(position).id, pendingChapterIndex);
+                    loadChapters(books.get(position).id, pendingChapterIndex, pendingChapterNumber);
                     pendingChapterIndex = 0;
+                    pendingChapterNumber = -1;
                 }
             }
 
@@ -143,9 +223,30 @@ public class BibleActivity extends Activity {
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+
+        if (initialBookIndex > 0 && initialBookIndex < books.size()) {
+            spinnerBooks.setSelection(initialBookIndex);
+        }
     }
 
-    private void loadChapters(int bookId, int targetChapterIndex) {
+    private int findBookIndex(BibleReferenceParser.ParsedRef parsed) {
+        if (parsed == null) {
+            return -1;
+        }
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).normalizedName.equals(parsed.normalizedBook)) {
+                return i;
+            }
+        }
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).normalizedName.startsWith(parsed.normalizedBook)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void loadChapters(int bookId, int targetChapterIndex, int targetChapterNumber) {
         chapters.clear();
         Cursor cursor = null;
         try {
@@ -172,6 +273,12 @@ public class BibleActivity extends Activity {
 
         if (!chapters.isEmpty()) {
             int idx = targetChapterIndex;
+            if (targetChapterNumber > 0) {
+                int found = chapters.indexOf(Integer.valueOf(targetChapterNumber));
+                if (found >= 0) {
+                    idx = found;
+                }
+            }
             if (idx < 0) {
                 idx = chapters.size() - 1;
             } else if (idx >= chapters.size()) {
@@ -182,8 +289,17 @@ public class BibleActivity extends Activity {
     }
 
     private void loadVerses(BookItem book, int chapter) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(book.name).append(" ").append(chapter).append("\n\n");
+        int accentColor = ThemeHelper.getAccentColor(this);
+        int highlightBg = ThemeHelper.getHighlightBgColor(this);
+
+        SpannableStringBuilder ssb = new SpannableStringBuilder();
+        String header = book.name + " " + chapter + "\n\n";
+        ssb.append(header);
+        ssb.setSpan(new StyleSpan(Typeface.BOLD), 0, header.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ssb.setSpan(new ForegroundColorSpan(accentColor), 0, header.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ssb.setSpan(new RelativeSizeSpan(1.15f), 0, header.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        int firstHighlightOffset = -1;
 
         Cursor cursor = null;
         try {
@@ -194,7 +310,39 @@ public class BibleActivity extends Activity {
             while (cursor.moveToNext()) {
                 int verseNum = cursor.getInt(0);
                 String text = cursor.getString(1);
-                sb.append(verseNum).append(". ").append(text).append("\n\n");
+
+                int verseStartOffset = ssb.length();
+                String numStr = verseNum + " ";
+                ssb.append(numStr);
+                ssb.setSpan(
+                        new StyleSpan(Typeface.BOLD),
+                        verseStartOffset,
+                        verseStartOffset + numStr.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+                ssb.setSpan(
+                        new ForegroundColorSpan(accentColor),
+                        verseStartOffset,
+                        verseStartOffset + numStr.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+
+                ssb.append(text);
+                int verseEndOffset = ssb.length();
+
+                if (highlightVerseStart > 0 && verseNum >= highlightVerseStart && verseNum <= highlightVerseEnd) {
+                    if (firstHighlightOffset < 0) {
+                        firstHighlightOffset = verseStartOffset;
+                    }
+                    ssb.setSpan(
+                            new BackgroundColorSpan(highlightBg),
+                            verseStartOffset,
+                            verseEndOffset,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    );
+                }
+
+                ssb.append("\n\n");
             }
         } finally {
             if (cursor != null) {
@@ -202,10 +350,23 @@ public class BibleActivity extends Activity {
             }
         }
 
-        txtBibleChapter.setText(sb.toString().trim());
+        txtBibleChapter.setText(ssb);
+
+        final int scrollTargetOffset = firstHighlightOffset;
+        clearHighlight();
+
         scrollBible.post(new Runnable() {
             @Override
             public void run() {
+                if (scrollTargetOffset >= 0) {
+                    Layout layout = txtBibleChapter.getLayout();
+                    if (layout != null) {
+                        int line = layout.getLineForOffset(scrollTargetOffset);
+                        int y = layout.getLineTop(line);
+                        scrollBible.scrollTo(0, Math.max(0, y - 16));
+                        return;
+                    }
+                }
                 scrollBible.scrollTo(0, 0);
             }
         });

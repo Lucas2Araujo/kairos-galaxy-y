@@ -58,8 +58,21 @@ public class HymnalActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hymnal);
 
+        View root = findViewById(R.id.rootHymnal);
+        root.setBackgroundColor(ThemeHelper.getBackgroundColor(this));
+
+        ThemeHelper.styleTopBar(
+                this,
+                findViewById(R.id.topBar),
+                findViewById(R.id.topDivider),
+                (TextView) findViewById(R.id.txtTopTitle),
+                (Button) findViewById(R.id.btnBack)
+        );
+
         editHymnNumber = (EditText) findViewById(R.id.editHymnNumber);
         Button btnGoHymn = (Button) findViewById(R.id.btnGoHymn);
+        ThemeHelper.stylePrimaryButton(this, btnGoHymn);
+
         listHymns = (ListView) findViewById(R.id.listHymns);
 
         btnGoHymn.setOnClickListener(new View.OnClickListener() {
