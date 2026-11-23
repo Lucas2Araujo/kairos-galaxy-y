@@ -1,6 +1,8 @@
 # Kairós Lite — Android 2.3 Gingerbread (Samsung Galaxy Y)
 
-Versão minimalista, 100% offline e leve em **Java puro + XML clássico** do **Kairós**, feita para rodar em aparelhos antigos como o **Samsung Galaxy Y** (`armv6` / `armeabi`, Android 2.3 API 9/10, tela QVGA `240x320` px).
+Versão minimalista, 100% offline e leve em **Java puro + XML clássico** do [**Kairós**](https://github.com/Lucas2Araujo/Kairos), feita para rodar em aparelhos antigos como o **Samsung Galaxy Y** (`armv6` / `armeabi`, Android 2.3 API 9/10, tela QVGA `240x320` px).
+
+> Projeto experimental derivado do repositório principal: **[Lucas2Araujo/Kairos](https://github.com/Lucas2Araujo/Kairos)**.
 
 ## Funcionalidades do MVP
 
