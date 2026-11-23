@@ -1,0 +1,65 @@
+name: Build Kairós Lite APK (Android 2.3)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build APK (API 9/10 Gingerbread)
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Verify APK compatibility (v1 signature + DEX 035)
+        run: |
+          BUILD_TOOLS_DIR="$(ls -d "${ANDROID_HOME}/build-tools/"* | sort -V | tail -n 1)"
+          "${BUILD_TOOLS_DIR}/apksigner" verify --verbose --min-sdk-version 9 build/kairos-lite-debug.apk
+          python3 -c '
+          import zipfile
+          with zipfile.ZipFile("build/kairos-lite-debug.apk") as z:
+              hdr = z.read("classes.dex")[:8]
+              assert hdr == b"dex\n035\x00", f"Unexpected DEX header: {hdr}"
+              for name in ("assets/ARA.sqlite", "assets/hinario_lite.db"):
+                  info = z.getinfo(name)
+                  assert info.compress_type == zipfile.ZIP_STORED, f"{name} must be uncompressed"
+          print("[OK] DEX 035 e assets sem compressao validados.")
+          '
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kairos-lite-debug-apk
+          path: build/kairos-lite-debug.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" build/kairos-lite-debug.apk \
+            --prerelease \
+            --title "${GITHUB_REF_NAME} — Kairós Lite (Galaxy Y / Android 2.3)" \
+            --notes "APK de teste compilado automaticamente via GitHub Actions para Android 2.3 Gingerbread (API 9/10, QVGA 240x320).
+
+          ### Conteúdo incluso (100% offline)
+          - Bíblia Sagrada (ARA — 66 livros, 31.104 versículos) com seletores de Livro/Capítulo e botões \`<\` / \`>\`
+          - Hinário Adventista (601 hinos, banco podado para 488 KB) com busca rápida por número e leitura em tela cheia
+          - Meditação Pôr do Sol 2026 (51 meditações) com pré-seleção automática da semana atual
+          - Alternância entre Tema Escuro e Tema Claro sem barra de título
+
+          ### Notas técnicas
+          - \`minSdkVersion: 9\` | \`targetSdkVersion: 10\` | DEX \`035\` | Assinatura JAR v1
+          - Bancos SQLite armazenados sem compressão no APK (evita \`UNCOMPRESS_DATA_MAX\` no Android 2.3)"
