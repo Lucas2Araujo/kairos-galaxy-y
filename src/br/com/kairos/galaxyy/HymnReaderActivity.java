@@ -9,35 +9,40 @@ import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
-import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import br.com.kairos.galaxyy.data.FavoritesHelper;
 import br.com.kairos.galaxyy.db.AssetDbHelper;
 import br.com.kairos.galaxyy.ui.ThemeHelper;
 
 public class HymnReaderActivity extends Activity {
 
     public static final String EXTRA_HYMN_ID = "hymn_id";
+    public static final String EXTRA_HYMNAL_DB = "hymnal_db";
 
     private SQLiteDatabase hymnalDb;
+    private String hymnalDbName;
+    private int hymnId;
+
     private TextView txtTopTitle;
     private TextView txtHeader;
-    private TextView txtBibleRefCard;
     private TextView txtLyrics;
+    private Button btnFavorite;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         ThemeHelper.applyTheme(this);
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_hymn_reader);
 
-        View root = findViewById(R.id.rootHymnReader);
-        root.setBackgroundColor(ThemeHelper.getBackgroundColor(this));
+        findViewById(R.id.rootHymnReader).setBackgroundColor(ThemeHelper.getBackgroundColor(this));
 
         txtTopTitle = (TextView) findViewById(R.id.txtTopTitle);
         ThemeHelper.styleTopBar(
@@ -48,19 +53,57 @@ public class HymnReaderActivity extends Activity {
                 (Button) findViewById(R.id.btnBack)
         );
 
+        btnFavorite = (Button) findViewById(R.id.btnFavorite);
+        Button btnHymnInfo = (Button) findViewById(R.id.btnHymnInfo);
         Button btnFontDown = (Button) findViewById(R.id.btnFontDown);
         Button btnFontUp = (Button) findViewById(R.id.btnFontUp);
+
+        ThemeHelper.styleBarButton(this, btnFavorite);
+        ThemeHelper.styleBarButton(this, btnHymnInfo);
         ThemeHelper.styleBarButton(this, btnFontDown);
         ThemeHelper.styleBarButton(this, btnFontUp);
 
         txtHeader = (TextView) findViewById(R.id.txtHymnHeader);
-        txtBibleRefCard = (TextView) findViewById(R.id.txtBibleRefCard);
         txtLyrics = (TextView) findViewById(R.id.txtHymnLyrics);
 
         txtHeader.setTextColor(ThemeHelper.getAccentColor(this));
         txtLyrics.setTextColor(ThemeHelper.getTextColor(this));
-        ThemeHelper.styleRefCard(this, txtBibleRefCard);
         applyFontSize();
+
+        hymnId = getIntent().getIntExtra(EXTRA_HYMN_ID, -1);
+        hymnalDbName = getIntent().getStringExtra(EXTRA_HYMNAL_DB);
+        if (hymnalDbName == null || hymnalDbName.length() == 0) {
+            hymnalDbName = HymnalActivity.HYMNAL_NEW_DB;
+        }
+        if (hymnId < 0) {
+            finish();
+            return;
+        }
+
+        updateFavoriteButton();
+
+        btnFavorite.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean added = FavoritesHelper.toggleFavorite(HymnReaderActivity.this, hymnalDbName, hymnId);
+                updateFavoriteButton();
+                Toast.makeText(
+                        HymnReaderActivity.this,
+                        added ? R.string.added_favorite : R.string.removed_favorite,
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+        });
+
+        btnHymnInfo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(HymnReaderActivity.this, HymnInfoActivity.class);
+                intent.putExtra(EXTRA_HYMN_ID, hymnId);
+                intent.putExtra(EXTRA_HYMNAL_DB, hymnalDbName);
+                startActivity(intent);
+            }
+        });
 
         btnFontDown.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -78,17 +121,11 @@ public class HymnReaderActivity extends Activity {
             }
         });
 
-        final int hymnId = getIntent().getIntExtra(EXTRA_HYMN_ID, -1);
-        if (hymnId < 0) {
-            finish();
-            return;
-        }
-
-        AssetDbHelper.openAsync(this, HymnalActivity.HYMNAL_DB, new AssetDbHelper.Callback() {
+        AssetDbHelper.openAsync(this, hymnalDbName, new AssetDbHelper.Callback() {
             @Override
             public void onOpened(SQLiteDatabase db) {
                 hymnalDb = db;
-                loadHymn(hymnId);
+                loadHymn();
             }
 
             @Override
@@ -102,44 +139,30 @@ public class HymnReaderActivity extends Activity {
         });
     }
 
+    private void updateFavoriteButton() {
+        boolean isFav = FavoritesHelper.isFavorite(this, hymnalDbName, hymnId);
+        btnFavorite.setText(isFav ? R.string.btn_fav_on : R.string.btn_fav_off);
+    }
+
     private void applyFontSize() {
         txtLyrics.setTextSize(TypedValue.COMPLEX_UNIT_SP, ThemeHelper.getFontSize(this));
     }
 
-    private void loadHymn(int hymnId) {
+    private void loadHymn() {
         Cursor cursor = null;
         try {
             cursor = hymnalDb.rawQuery(
-                    "SELECT numero, titulo, letra, autor_letra, texto_base FROM hino WHERE id = ?",
+                    "SELECT numero, titulo, letra FROM hino WHERE id = ?",
                     new String[]{String.valueOf(hymnId)}
             );
             if (cursor.moveToFirst()) {
                 String numero = cursor.getString(0);
                 String titulo = cursor.getString(1);
                 String letra = cursor.getString(2);
-                String autor = cursor.getString(3);
-                final String textoBase = cursor.getString(4);
 
                 txtTopTitle.setText("Hino " + numero);
                 txtHeader.setText(numero + " - " + titulo);
-
-                if (textoBase != null && textoBase.trim().length() > 0) {
-                    final String cleanRef = textoBase.trim();
-                    txtBibleRefCard.setText(getString(R.string.open_in_bible_prefix) + cleanRef + " >");
-                    txtBibleRefCard.setVisibility(View.VISIBLE);
-                    txtBibleRefCard.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            Intent intent = new Intent(HymnReaderActivity.this, BibleActivity.class);
-                            intent.putExtra(BibleActivity.EXTRA_BIBLE_REF, cleanRef);
-                            startActivity(intent);
-                        }
-                    });
-                } else {
-                    txtBibleRefCard.setVisibility(View.GONE);
-                }
-
-                txtLyrics.setText(formatLyrics(letra, autor));
+                txtLyrics.setText(formatLyrics(letra));
             } else {
                 Toast.makeText(this, R.string.hymn_not_found, Toast.LENGTH_SHORT).show();
                 finish();
@@ -151,10 +174,9 @@ public class HymnReaderActivity extends Activity {
         }
     }
 
-    private CharSequence formatLyrics(String letra, String autor) {
+    private CharSequence formatLyrics(String letra) {
         SpannableStringBuilder ssb = new SpannableStringBuilder();
         int accentColor = ThemeHelper.getAccentColor(this);
-        int secondaryColor = ThemeHelper.getSecondaryTextColor(this);
 
         if (letra != null && letra.trim().length() > 0) {
             String[] stanzas = letra.trim().split("\\n\\s*\\n");
@@ -180,18 +202,6 @@ public class HymnReaderActivity extends Activity {
                 }
             }
         }
-
-        if (autor != null && autor.trim().length() > 0) {
-            if (ssb.length() > 0) {
-                ssb.append("\n\n");
-            }
-            int start = ssb.length();
-            ssb.append("Letra: ").append(autor.trim());
-            int end = ssb.length();
-            ssb.setSpan(new ForegroundColorSpan(secondaryColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            ssb.setSpan(new RelativeSizeSpan(0.85f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        }
-
         return ssb;
     }
 

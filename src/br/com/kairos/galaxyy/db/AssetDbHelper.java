@@ -3,6 +3,7 @@ package br.com.kairos.galaxyy.db;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.AsyncTask;
 
@@ -16,6 +17,9 @@ import br.com.kairos.galaxyy.R;
 
 public class AssetDbHelper {
 
+    private static final String PREFS_DB = "kairos_db_versions";
+    private static final int ASSET_SCHEMA_VERSION = 2;
+
     public interface Callback {
         void onOpened(SQLiteDatabase db);
         void onError(Exception e);
@@ -23,13 +27,17 @@ public class AssetDbHelper {
 
     public static boolean isDatabaseReady(Context context, String dbName) {
         File dbFile = context.getDatabasePath(dbName);
-        return dbFile.exists() && dbFile.length() > 0;
+        if (!dbFile.exists() || dbFile.length() == 0) {
+            return false;
+        }
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_DB, Context.MODE_PRIVATE);
+        return prefs.getInt("ver_" + dbName, 0) >= ASSET_SCHEMA_VERSION;
     }
 
     public static SQLiteDatabase openAssetDatabase(Context context, String dbName) throws IOException {
         File dbFile = context.getDatabasePath(dbName);
 
-        if (!dbFile.exists() || dbFile.length() == 0) {
+        if (!isDatabaseReady(context, dbName)) {
             File parent = dbFile.getParentFile();
             if (parent != null && !parent.exists()) {
                 parent.mkdirs();
@@ -43,6 +51,8 @@ public class AssetDbHelper {
                 tmpFile.delete();
                 throw new IOException("Falha ao mover banco temporario: " + dbName);
             }
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_DB, Context.MODE_PRIVATE);
+            prefs.edit().putInt("ver_" + dbName, ASSET_SCHEMA_VERSION).commit();
         }
 
         return SQLiteDatabase.openDatabase(

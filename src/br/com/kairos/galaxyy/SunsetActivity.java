@@ -11,6 +11,7 @@ import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -36,6 +37,7 @@ public class SunsetActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         ThemeHelper.applyTheme(this);
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_sunset);
 
         View root = findViewById(R.id.rootSunset);

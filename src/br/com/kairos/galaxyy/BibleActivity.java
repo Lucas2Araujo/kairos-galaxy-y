@@ -1,6 +1,7 @@
 package br.com.kairos.galaxyy;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Typeface;
@@ -14,25 +15,28 @@ import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import br.com.kairos.galaxyy.data.BibleReferenceParser;
+import br.com.kairos.galaxyy.data.FavoritesHelper;
 import br.com.kairos.galaxyy.db.AssetDbHelper;
 import br.com.kairos.galaxyy.ui.ThemeHelper;
 
 public class BibleActivity extends Activity {
 
     public static final String EXTRA_BIBLE_REF = "bible_ref";
-    private static final String BIBLE_DB = "ARA.sqlite";
+    public static final String BIBLE_DB = "ARA.sqlite";
+    public static final String PERICOPES_DB = "pericopes.sqlite";
+    private static final int REQ_PICK_BIBLE = 101;
 
     private static class BookItem {
         final int id;
@@ -44,24 +48,19 @@ public class BibleActivity extends Activity {
             this.name = name;
             this.normalizedName = BibleReferenceParser.normalize(name);
         }
-
-        @Override
-        public String toString() {
-            return name;
-        }
     }
 
     private SQLiteDatabase bibleDb;
-    private Spinner spinnerBooks;
-    private Spinner spinnerChapters;
+    private SQLiteDatabase pericopesDb;
+    private Button btnPickReference;
     private ScrollView scrollBible;
     private TextView txtBibleChapter;
 
     private final List<BookItem> books = new ArrayList<BookItem>();
     private final List<Integer> chapters = new ArrayList<Integer>();
 
-    private int pendingChapterIndex = 0;
-    private int pendingChapterNumber = -1;
+    private int currentBookIndex = 0;
+    private int currentChapterIndex = 0;
     private int highlightVerseStart = -1;
     private int highlightVerseEnd = -1;
 
@@ -69,10 +68,10 @@ public class BibleActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         ThemeHelper.applyTheme(this);
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_bible);
 
-        View root = findViewById(R.id.rootBible);
-        root.setBackgroundColor(ThemeHelper.getBackgroundColor(this));
+        findViewById(R.id.rootBible).setBackgroundColor(ThemeHelper.getBackgroundColor(this));
 
         ThemeHelper.styleTopBar(
                 this,
@@ -86,14 +85,14 @@ public class BibleActivity extends Activity {
         Button btnFontUp = (Button) findViewById(R.id.btnFontUp);
         Button btnPrev = (Button) findViewById(R.id.btnPrevChapter);
         Button btnNext = (Button) findViewById(R.id.btnNextChapter);
+        btnPickReference = (Button) findViewById(R.id.btnPickReference);
 
         ThemeHelper.styleBarButton(this, btnFontDown);
         ThemeHelper.styleBarButton(this, btnFontUp);
         ThemeHelper.styleBarButton(this, btnPrev);
         ThemeHelper.styleBarButton(this, btnNext);
+        ThemeHelper.stylePrimaryButton(this, btnPickReference);
 
-        spinnerBooks = (Spinner) findViewById(R.id.spinnerBooks);
-        spinnerChapters = (Spinner) findViewById(R.id.spinnerChapters);
         scrollBible = (ScrollView) findViewById(R.id.scrollBible);
         txtBibleChapter = (TextView) findViewById(R.id.txtBibleChapter);
         txtBibleChapter.setTextColor(ThemeHelper.getTextColor(this));
@@ -131,11 +130,24 @@ public class BibleActivity extends Activity {
             }
         });
 
+        btnPickReference.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (books.isEmpty()) {
+                    return;
+                }
+                Intent intent = new Intent(BibleActivity.this, BiblePickerActivity.class);
+                intent.putExtra(BiblePickerActivity.EXTRA_BOOK_ID, books.get(currentBookIndex).id);
+                startActivityForResult(intent, REQ_PICK_BIBLE);
+            }
+        });
+
         AssetDbHelper.openAsync(this, BIBLE_DB, new AssetDbHelper.Callback() {
             @Override
             public void onOpened(SQLiteDatabase db) {
                 bibleDb = db;
-                loadBooks();
+                openPericopesOptional();
+                loadBooksAndInitialChapter();
             }
 
             @Override
@@ -149,6 +161,14 @@ public class BibleActivity extends Activity {
         });
     }
 
+    private void openPericopesOptional() {
+        try {
+            pericopesDb = AssetDbHelper.openAssetDatabase(getApplicationContext(), PERICOPES_DB);
+        } catch (Exception ignored) {
+            pericopesDb = null;
+        }
+    }
+
     private void applyFontSize() {
         txtBibleChapter.setTextSize(TypedValue.COMPLEX_UNIT_SP, ThemeHelper.getFontSize(this));
     }
@@ -158,7 +178,21 @@ public class BibleActivity extends Activity {
         highlightVerseEnd = -1;
     }
 
-    private void loadBooks() {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_BIBLE && resultCode == RESULT_OK && data != null) {
+            int bookId = data.getIntExtra(BiblePickerActivity.EXTRA_BOOK_ID, 1);
+            int chapter = data.getIntExtra(BiblePickerActivity.EXTRA_CHAPTER, 1);
+            clearHighlight();
+            int idx = findBookIndexById(bookId);
+            if (idx >= 0) {
+                openBookAndChapter(idx, chapter, false);
+            }
+        }
+    }
+
+    private void loadBooksAndInitialChapter() {
         books.clear();
         Cursor cursor = null;
         try {
@@ -171,62 +205,44 @@ public class BibleActivity extends Activity {
                 cursor.close();
             }
         }
+        if (books.isEmpty()) {
+            return;
+        }
 
-        int initialBookIndex = 0;
+        int targetBookIdx = 0;
+        int targetChapter = 1;
         String incomingRef = getIntent().getStringExtra(EXTRA_BIBLE_REF);
         if (incomingRef != null && incomingRef.trim().length() > 0) {
             BibleReferenceParser.ParsedRef parsed = BibleReferenceParser.parse(incomingRef);
             int matchedIndex = findBookIndex(parsed);
             if (parsed != null && matchedIndex >= 0) {
-                initialBookIndex = matchedIndex;
-                pendingChapterNumber = parsed.chapter;
+                targetBookIdx = matchedIndex;
+                targetChapter = parsed.chapter;
                 highlightVerseStart = parsed.verseStart;
                 highlightVerseEnd = parsed.verseEnd;
             } else {
                 Toast.makeText(this, R.string.ref_not_found, Toast.LENGTH_SHORT).show();
             }
+        } else {
+            int lastBookId = FavoritesHelper.getLastBibleBookId(this);
+            int lastChapter = FavoritesHelper.getLastBibleChapter(this);
+            int idx = findBookIndexById(lastBookId);
+            if (idx >= 0) {
+                targetBookIdx = idx;
+                targetChapter = lastChapter;
+            }
         }
 
-        ArrayAdapter<BookItem> adapter = new ArrayAdapter<BookItem>(
-                this,
-                android.R.layout.simple_spinner_item,
-                books
-        );
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerBooks.setAdapter(adapter);
+        openBookAndChapter(targetBookIdx, targetChapter, false);
+    }
 
-        spinnerBooks.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position >= 0 && position < books.size()) {
-                    loadChapters(books.get(position).id, pendingChapterIndex, pendingChapterNumber);
-                    pendingChapterIndex = 0;
-                    pendingChapterNumber = -1;
-                }
+    private int findBookIndexById(int bookId) {
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).id == bookId) {
+                return i;
             }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-
-        spinnerChapters.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                int bookPos = spinnerBooks.getSelectedItemPosition();
-                if (bookPos >= 0 && bookPos < books.size() && position >= 0 && position < chapters.size()) {
-                    loadVerses(books.get(bookPos), chapters.get(position));
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-
-        if (initialBookIndex > 0 && initialBookIndex < books.size()) {
-            spinnerBooks.setSelection(initialBookIndex);
         }
+        return -1;
     }
 
     private int findBookIndex(BibleReferenceParser.ParsedRef parsed) {
@@ -246,51 +262,73 @@ public class BibleActivity extends Activity {
         return -1;
     }
 
-    private void loadChapters(int bookId, int targetChapterIndex, int targetChapterNumber) {
+    private void openBookAndChapter(int bookIndex, int chapterNumber, boolean selectLastChapter) {
+        currentBookIndex = bookIndex;
+        BookItem book = books.get(currentBookIndex);
+
         chapters.clear();
         Cursor cursor = null;
         try {
             cursor = bibleDb.rawQuery(
                     "SELECT DISTINCT chapter FROM verse WHERE book_id = ? ORDER BY chapter",
-                    new String[]{String.valueOf(bookId)}
+                    new String[]{String.valueOf(book.id)}
             );
             while (cursor.moveToNext()) {
-                chapters.add(cursor.getInt(0));
+                chapters.add(Integer.valueOf(cursor.getInt(0)));
             }
         } finally {
             if (cursor != null) {
                 cursor.close();
             }
         }
+        if (chapters.isEmpty()) {
+            return;
+        }
 
-        ArrayAdapter<Integer> adapter = new ArrayAdapter<Integer>(
-                this,
-                android.R.layout.simple_spinner_item,
-                chapters
-        );
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerChapters.setAdapter(adapter);
+        if (selectLastChapter) {
+            currentChapterIndex = chapters.size() - 1;
+        } else {
+            int found = chapters.indexOf(Integer.valueOf(chapterNumber));
+            currentChapterIndex = found >= 0 ? found : 0;
+        }
 
-        if (!chapters.isEmpty()) {
-            int idx = targetChapterIndex;
-            if (targetChapterNumber > 0) {
-                int found = chapters.indexOf(Integer.valueOf(targetChapterNumber));
-                if (found >= 0) {
-                    idx = found;
+        int chapter = chapters.get(currentChapterIndex).intValue();
+        btnPickReference.setText(book.name + " " + chapter + " ▾");
+        FavoritesHelper.saveLastBiblePosition(this, book.id, chapter);
+        loadVerses(book, chapter);
+    }
+
+    private Map<Integer, String> loadPericopesForChapter(int bookId, int chapter) {
+        Map<Integer, String> map = new HashMap<Integer, String>();
+        if (pericopesDb == null || !pericopesDb.isOpen()) {
+            return map;
+        }
+        Cursor cursor = null;
+        try {
+            cursor = pericopesDb.rawQuery(
+                    "SELECT verse, title FROM pericope WHERE book_id = ? AND chapter = ? ORDER BY verse",
+                    new String[]{String.valueOf(bookId), String.valueOf(chapter)}
+            );
+            while (cursor.moveToNext()) {
+                int v = cursor.getInt(0);
+                String t = cursor.getString(1);
+                if (t != null && t.trim().length() > 0 && !map.containsKey(Integer.valueOf(v))) {
+                    map.put(Integer.valueOf(v), t.trim());
                 }
             }
-            if (idx < 0) {
-                idx = chapters.size() - 1;
-            } else if (idx >= chapters.size()) {
-                idx = 0;
+        } catch (Exception ignored) {
+        } finally {
+            if (cursor != null) {
+                cursor.close();
             }
-            spinnerChapters.setSelection(idx);
         }
+        return map;
     }
 
     private void loadVerses(BookItem book, int chapter) {
         int accentColor = ThemeHelper.getAccentColor(this);
         int highlightBg = ThemeHelper.getHighlightBgColor(this);
+        Map<Integer, String> pericopes = loadPericopesForChapter(book.id, chapter);
 
         SpannableStringBuilder ssb = new SpannableStringBuilder();
         String header = book.name + " " + chapter + "\n\n";
@@ -310,6 +348,16 @@ public class BibleActivity extends Activity {
             while (cursor.moveToNext()) {
                 int verseNum = cursor.getInt(0);
                 String text = cursor.getString(1);
+
+                String pericope = pericopes.get(Integer.valueOf(verseNum));
+                if (pericope != null) {
+                    int pStart = ssb.length();
+                    ssb.append(pericope).append("\n");
+                    int pEnd = ssb.length();
+                    ssb.setSpan(new StyleSpan(Typeface.BOLD), pStart, pEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    ssb.setSpan(new ForegroundColorSpan(accentColor), pStart, pEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    ssb.setSpan(new RelativeSizeSpan(0.92f), pStart, pEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
 
                 int verseStartOffset = ssb.length();
                 String numStr = verseNum + " ";
@@ -376,18 +424,18 @@ public class BibleActivity extends Activity {
         if (books.isEmpty() || chapters.isEmpty()) {
             return;
         }
-        int bookPos = spinnerBooks.getSelectedItemPosition();
-        int chapPos = spinnerChapters.getSelectedItemPosition();
-        int nextChap = chapPos + delta;
-
-        if (nextChap >= 0 && nextChap < chapters.size()) {
-            spinnerChapters.setSelection(nextChap);
-        } else if (delta > 0 && bookPos + 1 < books.size()) {
-            pendingChapterIndex = 0;
-            spinnerBooks.setSelection(bookPos + 1);
-        } else if (delta < 0 && bookPos - 1 >= 0) {
-            pendingChapterIndex = -1;
-            spinnerBooks.setSelection(bookPos - 1);
+        int nextChapIdx = currentChapterIndex + delta;
+        if (nextChapIdx >= 0 && nextChapIdx < chapters.size()) {
+            currentChapterIndex = nextChapIdx;
+            BookItem book = books.get(currentBookIndex);
+            int chapter = chapters.get(currentChapterIndex).intValue();
+            btnPickReference.setText(book.name + " " + chapter + " ▾");
+            FavoritesHelper.saveLastBiblePosition(this, book.id, chapter);
+            loadVerses(book, chapter);
+        } else if (delta > 0 && currentBookIndex + 1 < books.size()) {
+            openBookAndChapter(currentBookIndex + 1, 1, false);
+        } else if (delta < 0 && currentBookIndex - 1 >= 0) {
+            openBookAndChapter(currentBookIndex - 1, 1, true);
         }
     }
 
@@ -396,6 +444,9 @@ public class BibleActivity extends Activity {
         super.onDestroy();
         if (bibleDb != null && bibleDb.isOpen()) {
             bibleDb.close();
+        }
+        if (pericopesDb != null && pericopesDb.isOpen()) {
+            pericopesDb.close();
         }
     }
 }

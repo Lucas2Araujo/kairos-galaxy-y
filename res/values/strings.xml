@@ -4,7 +4,9 @@
     <string name="app_brand">KAIRÓS</string>
     <string name="app_subtitle">Lite • Bíblia, Hinário e Pôr do Sol</string>
     <string name="title_bible">Bíblia (ARA)</string>
+    <string name="title_bible_picker">Escolher Livro</string>
     <string name="title_hymnal">Hinário Adventista</string>
+    <string name="title_hymn_info">Sobre o Hino</string>
     <string name="title_sunset">Pôr do Sol</string>
 
     <string name="btn_bible">Bíblia Sagrada</string>
@@ -17,14 +19,31 @@
     <string name="btn_back">&lt;</string>
     <string name="btn_font_down">A-</string>
     <string name="btn_font_up">A+</string>
+    <string name="btn_info">i</string>
+    <string name="btn_fav_off">☆</string>
+    <string name="btn_fav_on">★</string>
+
+    <string name="tab_at">Antigo Test.</string>
+    <string name="tab_nt">Novo Test.</string>
+    <string name="tab_hymn_new">Novo (601)</string>
+    <string name="tab_hymn_old">Antigo (613)</string>
+    <string name="tab_hymn_favs">★ Favs</string>
 
     <string name="btn_prev_chapter">&lt;</string>
     <string name="btn_next_chapter">&gt;</string>
 
-    <string name="hint_hymn_number">Nº hino</string>
+    <string name="hint_hymn_search">Nº ou título...</string>
     <string name="btn_go">Ir</string>
     <string name="hymn_not_found">Hino não encontrado.</string>
+    <string name="no_favorites">Nenhum hino favorito ainda. Toque em ☆ ao ler um hino.</string>
+    <string name="added_favorite">Adicionado aos favoritos.</string>
+    <string name="removed_favorite">Removido dos favoritos.</string>
+
     <string name="open_in_bible_prefix">Ler na Bíblia: </string>
+    <string name="open_chapter_in_bible">Ler capítulo completo na Bíblia &gt;</string>
+    <string name="label_base_text">TEXTO-BASE</string>
+    <string name="label_related_texts">TEXTOS RELACIONADOS</string>
+    <string name="label_hymn_details">DETALHES DO HINO</string>
     <string name="ref_not_found">Referência bíblica não encontrada.</string>
 
     <string name="loading_db">Preparando banco de dados...</string>

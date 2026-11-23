@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -20,23 +22,29 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import br.com.kairos.galaxyy.data.BibleReferenceParser;
+import br.com.kairos.galaxyy.data.FavoritesHelper;
 import br.com.kairos.galaxyy.db.AssetDbHelper;
 import br.com.kairos.galaxyy.ui.ThemeHelper;
 
 public class HymnalActivity extends Activity {
 
-    public static final String HYMNAL_DB = "hinario_lite.db";
+    public static final String HYMNAL_NEW_DB = "hinario_lite.db";
+    public static final String HYMNAL_OLD_DB = "hinario_antigo_lite.db";
 
     private static class HymnItem {
         final int id;
         final String numero;
         final String titulo;
+        final String normalizedTitle;
 
         HymnItem(int id, String numero, String titulo) {
             this.id = id;
             this.numero = numero;
             this.titulo = titulo;
+            this.normalizedTitle = BibleReferenceParser.normalize(titulo);
         }
 
         @Override
@@ -46,11 +54,20 @@ public class HymnalActivity extends Activity {
     }
 
     private SQLiteDatabase hymnalDb;
-    private EditText editHymnNumber;
+    private String activeDbName;
+    private boolean favoritesOnly = false;
+
+    private Button btnTabNew;
+    private Button btnTabOld;
+    private Button btnTabFavs;
+    private EditText editHymnSearch;
+    private TextView txtEmptyHymns;
     private ListView listHymns;
 
-    private final List<HymnItem> hymns = new ArrayList<HymnItem>();
+    private final List<HymnItem> allHymns = new ArrayList<HymnItem>();
+    private final List<HymnItem> filteredHymns = new ArrayList<HymnItem>();
     private final Map<String, HymnItem> hymnsByNumber = new HashMap<String, HymnItem>();
+    private ArrayAdapter<HymnItem> listAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,8 +75,7 @@ public class HymnalActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hymnal);
 
-        View root = findViewById(R.id.rootHymnal);
-        root.setBackgroundColor(ThemeHelper.getBackgroundColor(this));
+        findViewById(R.id.rootHymnal).setBackgroundColor(ThemeHelper.getBackgroundColor(this));
 
         ThemeHelper.styleTopBar(
                 this,
@@ -69,45 +85,143 @@ public class HymnalActivity extends Activity {
                 (Button) findViewById(R.id.btnBack)
         );
 
-        editHymnNumber = (EditText) findViewById(R.id.editHymnNumber);
+        btnTabNew = (Button) findViewById(R.id.btnTabNew);
+        btnTabOld = (Button) findViewById(R.id.btnTabOld);
+        btnTabFavs = (Button) findViewById(R.id.btnTabFavs);
+        editHymnSearch = (EditText) findViewById(R.id.editHymnSearch);
         Button btnGoHymn = (Button) findViewById(R.id.btnGoHymn);
-        ThemeHelper.stylePrimaryButton(this, btnGoHymn);
-
+        txtEmptyHymns = (TextView) findViewById(R.id.txtEmptyHymns);
         listHymns = (ListView) findViewById(R.id.listHymns);
+
+        ThemeHelper.stylePrimaryButton(this, btnGoHymn);
+        txtEmptyHymns.setTextColor(ThemeHelper.getSecondaryTextColor(this));
+
+        listAdapter = new ArrayAdapter<HymnItem>(
+                this,
+                android.R.layout.simple_list_item_1,
+                filteredHymns
+        );
+        listHymns.setAdapter(listAdapter);
+
+        btnTabNew.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                favoritesOnly = false;
+                switchDatabase(HYMNAL_NEW_DB);
+            }
+        });
+
+        btnTabOld.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                favoritesOnly = false;
+                switchDatabase(HYMNAL_OLD_DB);
+            }
+        });
+
+        btnTabFavs.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                favoritesOnly = !favoritesOnly;
+                updateTabStyles();
+                applyFilter();
+            }
+        });
 
         btnGoHymn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                jumpToHymnNumber();
+                jumpOrOpenFirst();
             }
         });
 
-        editHymnNumber.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+        editHymnSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (actionId == EditorInfo.IME_ACTION_GO
                         || actionId == EditorInfo.IME_ACTION_DONE
                         || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
                         && event.getAction() == KeyEvent.ACTION_DOWN)) {
-                    jumpToHymnNumber();
+                    jumpOrOpenFirst();
                     return true;
                 }
                 return false;
             }
         });
 
+        editHymnSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                applyFilter();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
         listHymns.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                if (position >= 0 && position < hymns.size()) {
-                    openHymn(hymns.get(position));
+                if (position >= 0 && position < filteredHymns.size()) {
+                    openHymn(filteredHymns.get(position));
                 }
             }
         });
 
-        AssetDbHelper.openAsync(this, HYMNAL_DB, new AssetDbHelper.Callback() {
+        String savedDb = FavoritesHelper.getActiveHymnalDb(this, HYMNAL_NEW_DB);
+        switchDatabase(savedDb);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (favoritesOnly && !allHymns.isEmpty()) {
+            applyFilter();
+        }
+    }
+
+    private void updateTabStyles() {
+        boolean isNew = HYMNAL_NEW_DB.equals(activeDbName);
+        if (favoritesOnly) {
+            ThemeHelper.styleBarButton(this, btnTabNew);
+            ThemeHelper.styleBarButton(this, btnTabOld);
+            ThemeHelper.stylePrimaryButton(this, btnTabFavs);
+        } else if (isNew) {
+            ThemeHelper.stylePrimaryButton(this, btnTabNew);
+            ThemeHelper.styleBarButton(this, btnTabOld);
+            ThemeHelper.styleBarButton(this, btnTabFavs);
+        } else {
+            ThemeHelper.styleBarButton(this, btnTabNew);
+            ThemeHelper.stylePrimaryButton(this, btnTabOld);
+            ThemeHelper.styleBarButton(this, btnTabFavs);
+        }
+    }
+
+    private void switchDatabase(final String dbName) {
+        if (dbName.equals(activeDbName) && hymnalDb != null && hymnalDb.isOpen()) {
+            updateTabStyles();
+            applyFilter();
+            return;
+        }
+        activeDbName = dbName;
+        FavoritesHelper.setActiveHymnalDb(this, dbName);
+        updateTabStyles();
+
+        if (hymnalDb != null && hymnalDb.isOpen()) {
+            hymnalDb.close();
+            hymnalDb = null;
+        }
+
+        AssetDbHelper.openAsync(this, dbName, new AssetDbHelper.Callback() {
             @Override
             public void onOpened(SQLiteDatabase db) {
+                if (!dbName.equals(activeDbName)) {
+                    db.close();
+                    return;
+                }
                 hymnalDb = db;
                 loadHymnList();
             }
@@ -124,7 +238,7 @@ public class HymnalActivity extends Activity {
     }
 
     private void loadHymnList() {
-        hymns.clear();
+        allHymns.clear();
         hymnsByNumber.clear();
 
         Cursor cursor = null;
@@ -139,7 +253,7 @@ public class HymnalActivity extends Activity {
                         cursor.getString(1),
                         cursor.getString(2)
                 );
-                hymns.add(item);
+                allHymns.add(item);
                 if (item.numero != null) {
                     hymnsByNumber.put(item.numero.trim(), item);
                 }
@@ -149,28 +263,52 @@ public class HymnalActivity extends Activity {
                 cursor.close();
             }
         }
-
-        ArrayAdapter<HymnItem> adapter = new ArrayAdapter<HymnItem>(
-                this,
-                android.R.layout.simple_list_item_1,
-                hymns
-        );
-        listHymns.setAdapter(adapter);
+        applyFilter();
     }
 
-    private void jumpToHymnNumber() {
-        String raw = editHymnNumber.getText().toString().trim();
+    private void applyFilter() {
+        String raw = editHymnSearch.getText().toString().trim();
+        String queryNorm = BibleReferenceParser.normalize(raw);
+        Set<Integer> favs = favoritesOnly ? FavoritesHelper.getFavorites(this, activeDbName) : null;
+
+        filteredHymns.clear();
+        for (int i = 0; i < allHymns.size(); i++) {
+            HymnItem item = allHymns.get(i);
+            if (favs != null && !favs.contains(Integer.valueOf(item.id))) {
+                continue;
+            }
+            if (queryNorm.length() == 0
+                    || item.numero.startsWith(raw)
+                    || item.normalizedTitle.indexOf(queryNorm) >= 0) {
+                filteredHymns.add(item);
+            }
+        }
+        listAdapter.notifyDataSetChanged();
+
+        if (filteredHymns.isEmpty() && favoritesOnly && queryNorm.length() == 0) {
+            txtEmptyHymns.setVisibility(View.VISIBLE);
+        } else {
+            txtEmptyHymns.setVisibility(View.GONE);
+        }
+    }
+
+    private void jumpOrOpenFirst() {
+        String raw = editHymnSearch.getText().toString().trim();
         if (raw.length() == 0) {
             return;
         }
-        String normalized = raw.replaceFirst("^0+(?!$)", "");
-        HymnItem found = hymnsByNumber.get(normalized);
-        if (found == null) {
-            found = hymnsByNumber.get(raw);
+        String normalizedNum = raw.replaceFirst("^0+(?!$)", "");
+        HymnItem exact = hymnsByNumber.get(normalizedNum);
+        if (exact == null) {
+            exact = hymnsByNumber.get(raw);
         }
-        if (found != null) {
-            editHymnNumber.setText("");
-            openHymn(found);
+        if (exact != null) {
+            editHymnSearch.setText("");
+            openHymn(exact);
+            return;
+        }
+        if (!filteredHymns.isEmpty()) {
+            openHymn(filteredHymns.get(0));
         } else {
             Toast.makeText(this, R.string.hymn_not_found, Toast.LENGTH_SHORT).show();
         }
@@ -179,6 +317,7 @@ public class HymnalActivity extends Activity {
     private void openHymn(HymnItem item) {
         Intent intent = new Intent(this, HymnReaderActivity.class);
         intent.putExtra(HymnReaderActivity.EXTRA_HYMN_ID, item.id);
+        intent.putExtra(HymnReaderActivity.EXTRA_HYMNAL_DB, activeDbName);
         startActivity(intent);
     }
 

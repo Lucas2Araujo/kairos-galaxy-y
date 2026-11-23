@@ -28,7 +28,7 @@ ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
 APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 ANDROID_JAR="$PLATFORM_DIR/android.jar"
 
-for asset in "assets/ARA.sqlite" "assets/hinario_lite.db" "assets/meditacoes_2026.json"; do
+for asset in "assets/ARA.sqlite" "assets/pericopes.sqlite" "assets/hinario_lite.db" "assets/hinario_antigo_lite.db" "assets/meditacoes_2026.json"; do
     if [[ ! -f "$ROOT_DIR/$asset" ]]; then
         echo "Erro: asset ausente: $asset. Execute python3 scripts/prepare_assets.py" >&2
         exit 1
