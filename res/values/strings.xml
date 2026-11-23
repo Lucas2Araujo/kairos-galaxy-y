@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kairós Lite</string>
+    <string name="title_bible">Bíblia (ARA)</string>
+    <string name="title_hymnal">Hinário Adventista</string>
+    <string name="title_sunset">Pôr do Sol 2026</string>
+
+    <string name="btn_bible">Bíblia Sagrada</string>
+    <string name="btn_hymnal">Hinário Adventista</string>
+    <string name="btn_sunset">Meditação Pôr do Sol</string>
+
+    <string name="theme_dark_label">Tema: Escuro (toque p/ Claro)</string>
+    <string name="theme_light_label">Tema: Claro (toque p/ Escuro)</string>
+
+    <string name="btn_prev_chapter">&lt;</string>
+    <string name="btn_next_chapter">&gt;</string>
+
+    <string name="hint_hymn_number">Nº hino</string>
+    <string name="btn_go">Ir</string>
+    <string name="hymn_not_found">Hino não encontrado.</string>
+
+    <string name="loading_db">Preparando banco de dados...</string>
+    <string name="error_open_bible">Erro ao abrir Bíblia: </string>
+    <string name="error_open_hymnal">Erro ao abrir Hinário: </string>
+    <string name="error_open_sunset">Erro ao carregar meditações: </string>
+</resources>

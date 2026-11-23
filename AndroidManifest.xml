@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="br.com.kairos.galaxyy"
+    android:versionCode="1"
+    android:versionName="0.1-mvp"
+    android:installLocation="auto">
+
+    <uses-sdk
+        android:minSdkVersion="9"
+        android:targetSdkVersion="10" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.Black.NoTitleBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".BibleActivity"
+            android:label="@string/title_bible" />
+
+        <activity
+            android:name=".HymnalActivity"
+            android:label="@string/title_hymnal" />
+
+        <activity
+            android:name=".HymnReaderActivity"
+            android:label="@string/title_hymnal" />
+
+        <activity
+            android:name=".SunsetActivity"
+            android:label="@string/title_sunset" />
+
+    </application>
+</manifest>
